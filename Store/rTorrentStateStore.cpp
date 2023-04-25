@@ -25,20 +25,19 @@
 #include "Torrent/Box.h"
 #include "Torrent/BoxHelper.h"
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/property_tree/ini_parser.hpp>
-#include <boost/property_tree/ptree.hpp>
 #include <fmt/format.h>
 #include <jsoncons/json.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <locale>
 #include <mutex>
+#include <string>
+#include <string_view>
 
-namespace fs = boost::filesystem;
-namespace pt = boost::property_tree;
+namespace fs = std::filesystem;
+
+using namespace std::string_view_literals;
 
 namespace
 {
@@ -149,7 +148,7 @@ bool rTorrentTorrentStateIterator::GetNext(Box& nextBox)
         box.Torrent = TorrentInfo::Decode(*stream, m_bencoder);
 
         std::string const infoHash = torrentFilePath.stem().string();
-        if (!boost::algorithm::iequals(box.Torrent.GetInfoHash(), infoHash, std::locale::classic()))
+        if (!Util::IsEqualNoCase(box.Torrent.GetInfoHash(), infoHash, std::locale::classic()))
         {
             throw Exception(fmt::format("Info hashes don't match: {} vs. {}", box.Torrent.GetInfoHash(), infoHash));
         }
@@ -286,14 +285,33 @@ fs::path rTorrentStateStore::GuessDataDir([[maybe_unused]] Intention::Enum inten
         return {};
     }
 
-    pt::ptree config;
+    auto dataDirPath = fs::path();
+
     {
-        fs::ifstream stream(homeDir / Detail::ConfigFilename, std::ios_base::in);
-        pt::ini_parser::read_ini(stream, config);
+        auto stream = std::ifstream();
+        stream.exceptions(std::ifstream::badbit | std::ifstream::failbit);
+        stream.open(homeDir / Detail::ConfigFilename);
+
+        auto line = std::string();
+        while (std::getline(stream, line))
+        {
+            auto const equalsPos = line.find('=');
+            if (equalsPos == std::string::npos)
+            {
+                continue;
+            }
+
+            if (auto const key = Util::Trim(std::string_view(line).substr(0, equalsPos)); key != "session"sv)
+            {
+                continue;
+            }
+
+            dataDirPath = Util::GetPath(Util::Trim(std::string_view(line).substr(equalsPos + 1)));
+            break;
+        }
     }
 
-    fs::path const dataDirPath = Util::GetPath(config.get<std::string>("session"));
-    if (IsValidDataDir(dataDirPath, intention))
+    if (!dataDirPath.empty() && IsValidDataDir(dataDirPath, intention))
     {
         return dataDirPath;
     }
@@ -313,7 +331,7 @@ bool rTorrentStateStore::IsValidDataDir(fs::path const& dataDir, Intention::Enum
     for (fs::directory_iterator it(dataDir), end; it != end; ++it)
     {
         fs::path path = it->path();
-        if (path.extension() != Detail::StateFileExtension || it->status().type() != fs::regular_file)
+        if (path.extension() != Detail::StateFileExtension || !fs::is_regular_file(it->status()))
         {
             continue;
         }

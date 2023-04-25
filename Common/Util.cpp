@@ -19,25 +19,19 @@
 #include "Exception.h"
 #include "Logger.h"
 
-#include <boost/algorithm/string/replace.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 106600
-#include <boost/uuid/detail/sha1.hpp>
-#else
-#include <boost/uuid/sha1.hpp>
-#endif
+#include <digestpp.hpp>
 #include <fmt/format.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
-#include <iomanip>
+#include <filesystem>
 #include <locale>
-#include <sstream>
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
+
+using namespace std::string_view_literals;
 
 namespace Util
 {
@@ -45,16 +39,18 @@ namespace Util
 namespace
 {
 
-std::string FixPathSeparators(std::string const& nativePath)
+std::string FixPathSeparators(std::string_view nativePath)
 {
     if (nativePath.size() >= 3 && std::isalpha(nativePath[0]) && nativePath[1] == ':' &&
         (nativePath[2] == '/' || nativePath[2] == '\\'))
     {
         // Looks like Windows path
-        return boost::algorithm::replace_all_copy(nativePath, "\\", "/");
+        auto result = std::string(nativePath);
+        std::replace(result.begin(), result.end(), '\\', '/');
+        return result;
     }
 
-    return nativePath;
+    return std::string(nativePath);
 }
 
 } // namespace
@@ -71,35 +67,24 @@ long long StringToInt(std::string const& text)
     return result;
 }
 
-fs::path GetPath(std::string const& nativePath)
+fs::path GetPath(std::string_view nativePath)
 {
     std::string const fixedPath = FixPathSeparators(nativePath);
 
     try
     {
-        return fs::path{fixedPath};
+        return fs::path{std::u8string_view{reinterpret_cast<char8_t const*>(fixedPath.data()), fixedPath.size()}};
     }
     catch (std::exception const&)
     {
         Logger(Logger::Warning) << "Path " << std::quoted(fixedPath) << " is invalid";
-        return fs::path{fixedPath, std::use_facet<fs::path::codecvt_type>(std::locale::classic())};
+        return fs::path{fixedPath};
     }
 }
 
 std::string CalculateSha1(std::string const& data)
 {
-    boost::uuids::detail::sha1 sha;
-    sha.process_bytes(data.c_str(), data.size());
-    unsigned int result[5];
-    sha.get_digest(result);
-
-    std::ostringstream stream;
-    for (std::size_t i = 0; i < sizeof(result) / sizeof(*result); ++i)
-    {
-        stream << std::hex << std::setw(8) << std::setfill('0') << result[i];
-    }
-
-    return stream.str();
+    return digestpp::sha1().absorb(data).hexdigest();
 }
 
 std::string BinaryToHex(std::string const& data)
@@ -127,6 +112,29 @@ std::string GetEnvironmentVariable(std::string const& name, std::string const& d
 {
     auto const* value = std::getenv(name.c_str());
     return value != nullptr ? value : defaultValue;
+}
+
+bool IsEqualNoCase(std::string_view lhs, std::string_view rhs, std::locale const& locale)
+{
+    return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+        [&locale](char lhsChar, char rhsChar){ return std::tolower(lhsChar, locale) == std::tolower(rhsChar, locale); });
+}
+
+std::string_view Trim(std::string_view text)
+{
+    static constexpr auto Blanks = " \t\r\n"sv;
+
+    if (auto const pos = text.find_first_not_of(Blanks); pos != std::string_view::npos)
+    {
+        text.remove_prefix(pos);
+    }
+
+    if (auto const pos = text.find_last_not_of(Blanks); pos != std::string_view::npos)
+    {
+        text.remove_suffix(text.size() - pos - 1);
+    }
+
+    return text;
 }
 
 } // namespace Util

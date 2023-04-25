@@ -14,10 +14,8 @@ add_library(BtMigrateCommon
 
 target_link_libraries(BtMigrateCommon
     PUBLIC
-        Boost::filesystem
         jsoncons
     PRIVATE
-        Boost::boost
-        Boost::date_time
+        digestpp::digestpp
         fmt::fmt
         Threads::Threads)

@@ -8,18 +8,25 @@ endif()
 
 project(BtMigrate VERSION 0.1)
 
-find_package(Boost REQUIRED COMPONENTS date_time filesystem locale program_options system thread)
+option(USE_FETCHCONTENT "Use FetchContent to resolve dependencies" ON)
+
+if(USE_FETCHCONTENT)
+    include(fetch.cmake)
+endif()
+
+find_package(Threads REQUIRED)
+
+find_package(cxxopts REQUIRED)
 find_package(fmt REQUIRED)
 find_package(jsoncons REQUIRED)
 find_package(pugixml REQUIRED)
 find_package(SqliteOrm REQUIRED)
 
-find_package(Iconv)
-target_link_libraries(Boost::locale
-    INTERFACE
-        $<$<BOOL:${Iconv_FOUND}>:Iconv::Iconv>)
+if(NOT TARGET digestpp::digestpp)
+    find_package(digestpp REQUIRED)
+endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -32,7 +39,9 @@ if(WIN32)
         -DUNICODE
         -D_UNICODE
         -D_CRT_SECURE_NO_WARNINGS
-        -D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
+        -D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+        -DWIN32_LEAN_AND_MEAN
+        -DNOMINMAX)
 endif()
 
 if(MSVC)
@@ -63,11 +72,6 @@ target_link_libraries(BtMigrate
         BtMigrateTorrent)
 
 target_link_libraries(BtMigrate
-    PUBLIC
-        Boost::filesystem
     PRIVATE
-        Boost::date_time
-        Boost::locale
-        Boost::program_options
-        Boost::thread
+        cxxopts::cxxopts
         fmt::fmt)

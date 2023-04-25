@@ -26,19 +26,17 @@
 #include "Torrent/Box.h"
 #include "Torrent/BoxHelper.h"
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/path.hpp>
 #include <fmt/format.h>
 #include <jsoncons/json.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <limits>
 #include <locale>
 #include <mutex>
 #include <sstream>
 
-namespace fs = boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -208,7 +206,7 @@ bool DelugeTorrentStateIterator::GetNext(Box& nextBox)
         box.Torrent = TorrentInfo::Decode(*stream, m_bencoder);
 
         std::string const infoHash = state[STField::TorrentId].as<std::string>();
-        if (!boost::algorithm::iequals(box.Torrent.GetInfoHash(), infoHash, std::locale::classic()))
+        if (!Util::IsEqualNoCase(box.Torrent.GetInfoHash(), infoHash, std::locale::classic()))
         {
             throw Exception(fmt::format("Info hashes don't match: {} vs. {}", box.Torrent.GetInfoHash(), infoHash));
         }
@@ -221,7 +219,7 @@ bool DelugeTorrentStateIterator::GetNext(Box& nextBox)
     box.UploadedSize = fastResume[FRField::TotalUploaded].as<std::uint64_t>();
     box.CorruptedSize = 0;
     box.SavePath = Util::GetPath(state[STField::SavePath].as<std::string>()) / (fastResume.contains(FRField::MappedFiles) ?
-        *Util::GetPath(fastResume[FRField::MappedFiles][0].as<std::string>()).begin() : box.Torrent.GetName());
+        *Util::GetPath(fastResume[FRField::MappedFiles][0].as<std::string>()).begin() : Util::GetPath(box.Torrent.GetName()));
     box.BlockSize = box.Torrent.GetPieceSize();
     box.RatioLimit = FromStoreRatioLimit(state[STField::StopAtRatio], state[STField::StopRatio]);
     box.DownloadSpeedLimit = FromStoreSpeedLimit(state[STField::MaxDownloadSpeed]);

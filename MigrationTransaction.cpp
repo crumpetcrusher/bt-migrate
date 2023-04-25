@@ -19,22 +19,22 @@
 #include "Common/Exception.h"
 #include "Common/Logger.h"
 
-#include <boost/date_time.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/filesystem/operations.hpp>
+#include <fmt/chrono.h>
 #include <fmt/format.h>
-#include <fmt/ostream.h>
+#include <fmt/std.h>
 
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <locale>
 #include <sstream>
 
-namespace fs = boost::filesystem;
-namespace pt = boost::posix_time;
+namespace fs = std::filesystem;
 
 MigrationTransaction::MigrationTransaction(bool writeThrough, bool dryRun) :
     m_writeThrough(writeThrough),
     m_dryRun(dryRun),
-    m_transactionId(pt::to_iso_string(pt::microsec_clock::local_time())),
+    m_transactionId(fmt::format("{:%FT%T%z}", std::chrono::system_clock::now())),
     m_safePaths(),
     m_safePathsMutex()
 {
@@ -90,7 +90,7 @@ void MigrationTransaction::Commit()
 
 IReadStreamPtr MigrationTransaction::GetReadStream(fs::path const& path) const
 {
-    auto result = std::make_unique<fs::ifstream>();
+    auto result = std::make_unique<std::ifstream>();
     result->exceptions(std::ios_base::failbit | std::ios_base::badbit);
 
     try
@@ -121,7 +121,7 @@ IWriteStreamPtr MigrationTransaction::GetWriteStream(fs::path const& path)
         "/dev/null";
 #endif
 
-    auto result = std::make_unique<fs::ofstream>();
+    auto result = std::make_unique<std::ofstream>();
     result->exceptions(std::ios_base::failbit | std::ios_base::badbit);
 
     try
